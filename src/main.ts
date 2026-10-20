@@ -47,6 +47,7 @@ type Stat = {
   convenience: number | null;
   drugstore: number | null;
   park: number | null;
+  score?: number | null; // 総合スコア 0〜100。ブラウザ内で重みから計算する（stats.json には無い）
 };
 
 type AxisDef = {
@@ -88,7 +89,87 @@ const AXES: Record<string, AxisDef> = {
     labels: ['2 未満', '2 〜 4', '4 〜 5.5', '5.5 〜 6.5', '6.5 以上'],
     naLabel: 'データなし',
   },
+  // 総合スコアは 3 軸の百分位（0〜1）を重み付き平均し 0〜100 にしたもの。順次型（ColorBrewer PuBu）
+  score: {
+    key: 'score',
+    title: '総合スコア（3 軸の百分位の重み付き平均、0〜100）',
+    stops: [20, 40, 60, 80],
+    colors: ['#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d'],
+    labels: ['20 未満', '20 〜 40', '40 〜 60', '60 〜 80', '80 以上'],
+    naLabel: 'いずれかの軸が比較不可・データなし',
+  },
 };
+
+// ---- 総合スコア ------------------------------------------------------------
+// 3 軸を百分位（0〜1。外れ値の影響を受けない）に直し、重み付き平均する。犯罪は少ないほど良いので反転する
+type ScoreAxis = 'rate' | 'crime_per_1000' | 'access_score';
+const SCORE_AXES: { key: ScoreAxis; label: string; higherIsBetter: boolean }[] = [
+  { key: 'rate', label: '人口増減', higherIsBetter: true },
+  { key: 'crime_per_1000', label: '治安（犯罪発生率の低さ）', higherIsBetter: false },
+  { key: 'access_score', label: '施設の近さ', higherIsBetter: true },
+];
+
+// key_code → 各軸の百分位（0〜1、無ければ null）
+const percentiles = new Map<string, Record<ScoreAxis, number | null>>();
+
+function computePercentiles(rows: Stat[]) {
+  for (const axis of SCORE_AXES) {
+    const vals = rows.map((r) => r[axis.key]).filter((v): v is number => v !== null && v !== undefined);
+    const sorted = [...vals].sort((a, b) => a - b);
+    const n = sorted.length;
+    // 同じ値は同じ百分位にする（下側の個数 ÷ n）
+    const rankOf = (v: number) => {
+      let lo = 0, hi = n;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid] < v) lo = mid + 1; else hi = mid;
+      }
+      return n > 1 ? lo / (n - 1) : 0;
+    };
+    for (const r of rows) {
+      const v = r[axis.key];
+      const entry = percentiles.get(r.key_code) ?? { rate: null, crime_per_1000: null, access_score: null };
+      entry[axis.key] = v === null || v === undefined ? null : axis.higherIsBetter ? rankOf(v) : 1 - rankOf(v);
+      percentiles.set(r.key_code, entry);
+    }
+  }
+}
+
+function readWeights(): Record<ScoreAxis, number> {
+  const w = { rate: 0, crime_per_1000: 0, access_score: 0 };
+  for (const el of document.querySelectorAll<HTMLInputElement>('input[name="weight"]')) {
+    w[el.dataset.axis as ScoreAxis] = Number(el.value);
+    el.nextElementSibling!.textContent = el.value;
+  }
+  return w;
+}
+
+// 3 軸がそろっている町丁目だけスコアを付ける。重みの合計が 0 なら全て null
+function computeScore(p: Record<ScoreAxis, number | null>, w: Record<ScoreAxis, number>): number | null {
+  const total = w.rate + w.crime_per_1000 + w.access_score;
+  if (total === 0 || p.rate === null || p.crime_per_1000 === null || p.access_score === null) return null;
+  const s = (p.rate * w.rate + p.crime_per_1000 * w.crime_per_1000 + p.access_score * w.access_score) / total;
+  return Math.round(s * 100);
+}
+
+function applyScores() {
+  const w = readWeights();
+  for (const [key_code, p] of percentiles) {
+    map.setFeatureState({ source: 'chome', sourceLayer: 'chome', id: key_code }, { score: computeScore(p, w) });
+  }
+}
+
+function setupWeights() {
+  let pending = false;
+  for (const el of document.querySelectorAll<HTMLInputElement>('input[name="weight"]')) {
+    el.addEventListener('input', () => {
+      // スライダーは連続して動くので、描画 1 回につき 1 回だけ再計算する
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; applyScores(); });
+    });
+  }
+}
 
 // 施設カテゴリ（places.pmtiles の category 属性）の表示名と色。工程 7 の集計でも同じキーを使う
 const PLACE_CATEGORIES: Record<string, { label: string; color: string }> = {
@@ -259,6 +340,9 @@ map.on('load', async () => {
       },
     );
   }
+  computePercentiles(rows);
+  setupWeights();
+  applyScores();
   console.log(`map loaded: stats ${rows.length} rows`);
 });
 
@@ -298,6 +382,28 @@ function placesSummary(s: Partial<Stat>): string {
     .join('・');
 }
 
+// 3 軸の百分位を三角形のレーダーにする（1 点に畳んだスコアだけでなく、どの軸が効いているかを見せる）
+function radarSvg(p: Record<ScoreAxis, number | null> | undefined): string {
+  if (!p) return '';
+  const R = 32, cx = 60, cy = 46;
+  const pts = SCORE_AXES.map((a, i) => {
+    const ang = -Math.PI / 2 + (i * 2 * Math.PI) / 3;
+    return { v: p[a.key] ?? 0, x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang), label: a.label.split('（')[0] };
+  });
+  const poly = (k: number) => pts.map((q) => `${cx + (q.x - cx) * k},${cy + (q.y - cy) * k}`).join(' ');
+  const val = pts.map((q) => `${cx + (q.x - cx) * q.v},${cy + (q.y - cy) * q.v}`).join(' ');
+  const labels = pts
+    .map((q, i) => {
+      const anchor = i === 0 ? 'middle' : i === 1 ? 'start' : 'end';
+      const dy = i === 0 ? -4 : 10;
+      return `<text x="${q.x}" y="${q.y + dy}" text-anchor="${anchor}" font-size="9">${q.label} ${Math.round(q.v * 100)}</text>`;
+    })
+    .join('');
+  return `<svg class="radar" viewBox="0 0 120 92" width="150" height="115">
+    <polygon points="${poly(1)}" fill="none" stroke="#ccc"/><polygon points="${poly(0.5)}" fill="none" stroke="#e5e5e5"/>
+    <polygon points="${val}" fill="rgba(43,140,190,0.35)" stroke="#2b8cbe"/>${labels}</svg>`;
+}
+
 function popupHtml(f: MapGeoJSONFeature): string {
   const p = f.properties as { key_code: string; city_name: string; name: string | null };
   const s = f.state as Partial<Stat>;
@@ -320,7 +426,9 @@ function popupHtml(f: MapGeoJSONFeature): string {
         <tr><th>認知件数 2025</th><td>${fmt(s.crime_total, ' 件')}</td></tr>
         <tr><th>千人あたり</th><td>${crimeRate}</td></tr>
         <tr><th>施設の近さ</th><td>${fmt(s.access_score)} / 7</td></tr>
+        <tr><th>総合スコア</th><td>${fmt(s.score)}</td></tr>
       </table>
+      ${radarSvg(percentiles.get(p.key_code))}
       <div class="popup-places">1 km 以内: ${placesSummary(s)}</div>
       <div class="popup-note">${notes.join('<br>')}</div>
     </div>`;
