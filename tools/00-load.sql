@@ -59,3 +59,80 @@ SELECT 'population' AS tbl, year, count(*) AS rows, sum(pop) AS total FROM popul
 SELECT 'chome without 2015' AS chk, count(*) AS n
 FROM chome c LEFT JOIN population p ON p.key_code = c.key_code AND p.year = 2015
 WHERE p.key_code IS NULL OR p.pop IS NULL;
+
+-- ============================================================
+-- crime: 警視庁「区市町村の町丁別、罪種別及び手口別認知件数」令和 7 年（2025 年）の年計
+-- 横持ち（市区町丁 + 罪種 37 列）を縦持ちにし、町丁名を e-Stat の表記に正規化して chome と結合する
+-- 1 つの町丁名が複数の町丁目に対応するとき（大字単位の行、住居表示前の名前）は 2020 年人口で按分する
+-- ============================================================
+DELETE FROM chome_alias;
+INSERT INTO chome_alias
+SELECT crime_name, city_name, chome_name FROM read_csv('tools/chome-alias.csv', all_varchar = true);
+
+-- 表記の正規化: ヶ → ケ、丁目の全角数字 → 漢数字（e-Stat は「二丁目」、警視庁は「２丁目」）
+CREATE OR REPLACE TEMP MACRO norm_name(s) AS
+  regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+  regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+  regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+  regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+    replace(s, 'ヶ', 'ケ'),
+    '１０丁目', '十丁目'), '１１丁目', '十一丁目'), '１２丁目', '十二丁目'), '１３丁目', '十三丁目'), '１４丁目', '十四丁目'),
+    '１５丁目', '十五丁目'), '１６丁目', '十六丁目'), '１７丁目', '十七丁目'), '１８丁目', '十八丁目'), '１９丁目', '十九丁目'),
+    '１丁目', '一丁目'), '２丁目', '二丁目'), '３丁目', '三丁目'), '４丁目', '四丁目'), '５丁目', '五丁目'),
+    '６丁目', '六丁目'), '７丁目', '七丁目'), '８丁目', '八丁目'), '９丁目', '九丁目');
+
+CREATE OR REPLACE TEMP TABLE crime_wide AS
+SELECT * FROM read_csv('data/raw/keishicho/R7.utf8.csv', header = true, all_varchar = true);
+
+CREATE OR REPLACE TEMP TABLE crime_raw AS
+SELECT 市区町丁 AS crime_name, category, CAST(cnt AS INTEGER) AS cnt
+FROM (UNPIVOT crime_wide ON COLUMNS(* EXCLUDE (市区町丁)) INTO NAME category VALUE cnt);
+
+-- 町丁名を区市町村名と町丁名に分ける。小計行（「〜計」、区市町村名だけの行）と地域外（他県・海外認知・不明）は除く
+CREATE OR REPLACE TEMP TABLE crime_names AS
+WITH n AS (
+  SELECT DISTINCT 市区町丁 AS crime_name, regexp_replace(市区町丁, '^(西多摩郡|三宅島|八丈島)', '') AS n2
+  FROM crime_wide
+  WHERE 市区町丁 NOT LIKE '%計' AND 市区町丁 NOT IN ('他県', '海外認知', '不明')
+), s AS (
+  SELECT crime_name, n2,
+         (SELECT city_name FROM (SELECT DISTINCT city_name FROM chome) x
+           WHERE starts_with(n2, x.city_name) ORDER BY length(x.city_name) DESC LIMIT 1) AS city_name
+  FROM n
+)
+SELECT crime_name, city_name, norm_name(substr(n2, length(city_name) + 1)) AS town
+FROM s WHERE city_name IS NOT NULL AND length(n2) > length(city_name);
+
+-- 対応先の key_code: 名前の一致 → 無ければ chome_alias
+CREATE OR REPLACE TEMP TABLE crime_map AS
+SELECT n.crime_name, c.key_code
+FROM crime_names n JOIN chome c ON c.city_name = n.city_name AND norm_name(c.name) = n.town
+WHERE n.crime_name NOT IN (SELECT crime_name FROM chome_alias)
+UNION
+SELECT a.crime_name, c.key_code
+FROM chome_alias a JOIN chome c ON c.city_name = a.city_name AND c.name LIKE a.chome_name;
+
+-- 按分比: 2020 年人口の比。人口が全て 0 か不明なら等分
+CREATE OR REPLACE TEMP TABLE crime_share AS
+SELECT m.crime_name, m.key_code,
+       CASE WHEN sum(coalesce(p.pop, 0)) OVER (PARTITION BY m.crime_name) > 0
+            THEN coalesce(p.pop, 0) * 1.0 / sum(coalesce(p.pop, 0)) OVER (PARTITION BY m.crime_name)
+            ELSE 1.0 / count(*) OVER (PARTITION BY m.crime_name) END AS share
+FROM crime_map m LEFT JOIN population p ON p.key_code = m.key_code AND p.year = 2020;
+
+DELETE FROM crime;
+INSERT INTO crime
+SELECT s.key_code, 2025, r.category, sum(r.cnt * s.share)
+FROM crime_raw r JOIN crime_share s USING (crime_name)
+GROUP BY ALL;
+
+SELECT 'crime' AS tbl, count(DISTINCT key_code) AS chome_with_crime,
+       round(sum(cnt)) AS total FROM crime WHERE category = '総合計';
+-- 結合できなかった町丁名（件数の多い順）。全体に対する割合が 5% 未満であること
+SELECT 'crime unmatched' AS chk, count(*) AS names, sum(cnt) AS cnt,
+       round(100.0 * sum(cnt) / (SELECT sum(cnt) FROM crime_raw r2 JOIN crime_names USING (crime_name) WHERE category = '総合計'), 2) AS pct
+FROM crime_raw r JOIN crime_names USING (crime_name)
+WHERE category = '総合計' AND crime_name NOT IN (SELECT crime_name FROM crime_map);
+SELECT 'unmatched name' AS chk, crime_name, cnt
+FROM crime_raw r JOIN crime_names USING (crime_name)
+WHERE category = '総合計' AND crime_name NOT IN (SELECT crime_name FROM crime_map) ORDER BY cnt DESC;

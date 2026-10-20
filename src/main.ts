@@ -30,12 +30,14 @@ const CHOME_URL = new URL('chome.pmtiles', BASE).href;
 const STATS_URL = new URL('stats.json', BASE).href;
 
 // ---- 軸と凡例の定義 --------------------------------------------------------
-// stats.json の 1 行。工程 5・7 で列が増える
+// stats.json の 1 行。工程 7 で列が増える
 type Stat = {
   key_code: string;
   pop2015: number | null;
   pop2020: number | null;
   rate: number | null;
+  crime_total: number | null; // 2025 年の認知件数（総合計）
+  crime_per_1000: number | null; // 人口千人あたり。2020 年人口 100 人未満は null
 };
 
 type AxisDef = {
@@ -59,6 +61,15 @@ const AXES: Record<string, AxisDef> = {
     labels: ['-10% 以下', '-10 〜 -3%', '-3 〜 +3%', '+3 〜 +10%', '+10% 以上'],
     naLabel: '比較不可（2015 年に 100 人未満、または区画の変更）',
   },
+  // 犯罪発生率は大きいほど悪いので順次型（ColorBrewer YlOrRd）。境界は中央値 4.5、90% 点 14 を目安にした
+  crime: {
+    key: 'crime_per_1000',
+    title: '犯罪発生率 2025（人口千人あたりの認知件数）',
+    stops: [2, 4, 8, 16],
+    colors: ['#ffffb2', '#fecc5c', '#fd8d3c', '#f03b20', '#bd0026'],
+    labels: ['2 未満', '2 〜 4', '4 〜 8', '8 〜 16', '16 以上'],
+    naLabel: 'データなし、または 2020 年人口 100 人未満',
+  },
 };
 
 // feature-state の値を階級色にする式
@@ -70,6 +81,7 @@ function fillColorExpression(axis: AxisDef): ExpressionSpecification {
 }
 
 function renderLegend(axis: AxisDef) {
+  document.getElementById('legend-title')!.textContent = axis.title;
   const ul = document.getElementById('legend')!;
   ul.innerHTML = '';
   const items = axis.colors.map((c, i) => [c, axis.labels[i]] as const).concat([[NA_COLOR, axis.naLabel]]);
@@ -99,7 +111,8 @@ map.addControl(
     compact: false,
     customAttribution:
       '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>' +
-      ' | <a href="https://www.e-stat.go.jp/" target="_blank" rel="noopener">e-Stat</a>（国勢調査 2015・2020 小地域）',
+      ' | <a href="https://www.e-stat.go.jp/" target="_blank" rel="noopener">e-Stat</a>（国勢調査 2015・2020 小地域）' +
+      ' | <a href="https://www.keishicho.metro.tokyo.lg.jp/about_mpd/jokyo_tokei/jokyo/ninchikensu.html" target="_blank" rel="noopener">警視庁</a>（認知件数 2025）',
   }),
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
@@ -156,17 +169,36 @@ map.on('load', async () => {
 
   renderLegend(axis);
   setupInteraction();
+  setupAxisSwitch();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
   const rows: Stat[] = await (await fetch(STATS_URL)).json();
   for (const s of rows) {
     map.setFeatureState(
       { source: 'chome', sourceLayer: 'chome', id: s.key_code },
-      { rate: s.rate, pop2015: s.pop2015, pop2020: s.pop2020 },
+      {
+        rate: s.rate,
+        pop2015: s.pop2015,
+        pop2020: s.pop2020,
+        crime_total: s.crime_total,
+        crime_per_1000: s.crime_per_1000,
+      },
     );
   }
   console.log(`map loaded: stats ${rows.length} rows`);
 });
+
+// ---- 軸の切り替え ----------------------------------------------------------
+function setupAxisSwitch() {
+  for (const el of document.querySelectorAll<HTMLInputElement>('input[name="axis"]')) {
+    el.addEventListener('change', () => {
+      const axis = AXES[el.value];
+      if (!axis) return;
+      map.setPaintProperty('chome-fill', 'fill-color', fillColorExpression(axis));
+      renderLegend(axis);
+    });
+  }
+}
 
 // ---- 操作: ホバーで輪郭を強調、クリック（タップ）でポップアップ ------------
 function fmt(n: number | null | undefined, unit = ''): string {
@@ -178,6 +210,13 @@ function popupHtml(f: MapGeoJSONFeature): string {
   const s = f.state as Partial<Stat>;
   const title = p.name ? `${p.city_name} ${p.name}` : `${p.city_name}（名称なし）`;
   const rate = s.rate === null || s.rate === undefined ? '比較不可' : `${s.rate > 0 ? '+' : ''}${s.rate}%`;
+  const hasCrime = s.crime_total !== null && s.crime_total !== undefined;
+  const crimeRate = s.crime_per_1000 === null || s.crime_per_1000 === undefined ? '—' : `${s.crime_per_1000}`;
+  // 繁華街・オフィス街は居住人口が少なく、来訪者の分も件数に入るので発生率が極端になる
+  const fewResidents = hasCrime && ((s.pop2020 ?? 0) < 100 || (s.crime_per_1000 ?? 0) >= 30);
+  const notes = [`町丁目コード ${p.key_code}`];
+  if (!hasCrime) notes.push('犯罪: 警視庁の表に無い町丁目');
+  if (fewResidents) notes.push('居住人口が少ないため発生率は参考値（来訪者の分も件数に入る）');
   return `
     <div class="popup">
       <div class="popup-title">${title}</div>
@@ -185,8 +224,10 @@ function popupHtml(f: MapGeoJSONFeature): string {
         <tr><th>人口 2015</th><td>${fmt(s.pop2015, ' 人')}</td></tr>
         <tr><th>人口 2020</th><td>${fmt(s.pop2020, ' 人')}</td></tr>
         <tr><th>増減率</th><td>${rate}</td></tr>
+        <tr><th>認知件数 2025</th><td>${fmt(s.crime_total, ' 件')}</td></tr>
+        <tr><th>千人あたり</th><td>${crimeRate}</td></tr>
       </table>
-      <div class="popup-note">町丁目コード ${p.key_code}</div>
+      <div class="popup-note">${notes.join('<br>')}</div>
     </div>`;
 }
 

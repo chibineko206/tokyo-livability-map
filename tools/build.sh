@@ -15,6 +15,8 @@ echo "== 1. 取り込み"
 python3 tools/dbf2csv.py data/raw/estat2020/r2ka13.dbf data/raw/estat2020/r2ka13.attr.csv
 # e-Stat の統計表 CSV は Shift_JIS。DuckDB の read_csv は読めないので UTF-8 に変換してから読む
 iconv -f CP932 -t UTF-8 data/raw/tblT000848/tblT000848C13.txt > data/raw/tblT000848/tblT000848C13.utf8.csv
+# 警視庁の認知件数 CSV も Shift_JIS
+iconv -f CP932 -t UTF-8 data/raw/keishicho/R7.csv > data/raw/keishicho/R7.utf8.csv
 duckdb "$DB" -f tools/00-load.sql
 
 echo "== 2. 町丁目 → PMTiles"
