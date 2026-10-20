@@ -10,7 +10,20 @@
     <div id="map"></div>
     <aside id="panel">
       <h1>東京の住環境マップ</h1>
-      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 2: 町丁目の輪郭まで。</p>
+      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 3: 人口増減の塗り分けまで。</p>
+
+      <section>
+        <h2>表示する軸</h2>
+        <label><input type="radio" name="axis" value="rate" checked /> 人口増減（2015 → 2020）</label>
+        <label class="disabled"><input type="radio" name="axis" value="crime" disabled /> 犯罪発生率（工程 5）</label>
+        <label class="disabled"><input type="radio" name="axis" value="access" disabled /> 施設の近さ（工程 7）</label>
+        <label class="disabled"><input type="radio" name="axis" value="score" disabled /> 総合スコア（工程 8）</label>
+      </section>
+
+      <section>
+        <h2>凡例</h2>
+        <ul id="legend" class="legend"></ul>
+      </section>
     </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>

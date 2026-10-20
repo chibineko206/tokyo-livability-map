@@ -53,3 +53,19 @@ CREATE TABLE IF NOT EXISTS access (
 );
 
 -- ビュー stats は工程 3 で定義し、工程 5・7 で列を足す
+
+-- ビュー stats: 配信する町丁目ごとの数値。工程 5・7 で列を足す
+-- rate は 2015 → 2020 の増減率（%）。2015 の人口が 100 人未満か不明なら NULL（比較不可）
+CREATE OR REPLACE VIEW stats AS
+WITH p AS (
+  SELECT key_code,
+         max(pop) FILTER (WHERE year = 2015) AS pop2015,
+         max(pop) FILTER (WHERE year = 2020) AS pop2020
+  FROM population GROUP BY key_code
+)
+SELECT c.key_code,
+       p.pop2015,
+       p.pop2020,
+       CASE WHEN p.pop2015 >= 100 AND p.pop2020 IS NOT NULL
+            THEN round((p.pop2020 - p.pop2015) * 100.0 / p.pop2015, 1) END AS rate
+FROM chome c LEFT JOIN p USING (key_code);

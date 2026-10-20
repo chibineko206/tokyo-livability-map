@@ -24,7 +24,10 @@ bash tools/build.sh
 
 | 入力 | 置き場所 | 取得元 |
 |---|---|---|
-| 小地域境界 2020（東京都、世界測地系緯度経度、Shape） | `data/raw/estat2020/r2ka13.{shp,shx,dbf,prj}` | e-Stat 境界データ: `https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code=13&coordSys=1&format=shape&downloadType=5&datum=2011` を展開 |
+| 小地域境界 2020（東京都、世界測地系緯度経度、Shape。属性 `JINKO` が 2020 年人口） | `data/raw/estat2020/r2ka13.{shp,shx,dbf,prj}` | e-Stat 境界データ: `https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code=13&coordSys=1&format=shape&downloadType=5&datum=2011` を展開 |
+| 2015 年国勢調査 小地域 人口総数（東京都、表 T000848） | `data/raw/tblT000848/tblT000848C13.txt` | e-Stat 統計データ: `https://www.e-stat.go.jp/gis/statmap-search/data?statsId=T000848&code=13&downloadType=2` を展開 |
+
+注意: 統計表の URL の `code=13` は小地域（ファイル名 `C13`）では東京都だが、同じ ID 系列でもメッシュの表（`S` / `H` / `Q`）ではメッシュ番号の意味になる。取得したら先頭の `KEY_CODE` が `13` で始まることを確かめる。
 
 `build.sh` の流れ: `00-schema.sql`（テーブル定義）→ `dbf2csv.py`（Shift_JIS の DBF を UTF-8 CSV に）→ `00-load.sql`（取り込み）→ `01-chome.sql`（GeoJSON 書き出し）→ tippecanoe（`public/chome.pmtiles`）。
 
