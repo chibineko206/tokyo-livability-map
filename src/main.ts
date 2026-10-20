@@ -90,12 +90,13 @@ const AXES: Record<string, AxisDef> = {
     labels: ['2 未満', '2 〜 4', '4 〜 5.5', '5.5 〜 6.5', '6.5 以上'],
     naLabel: 'データなし',
   },
-  // 総合スコアは 3 軸の百分位（0〜1）を重み付き平均し 0〜100 にしたもの。順次型（ColorBrewer PuBu）
+  // 総合スコアは 3 軸の百分位（0〜1）を重み付き平均し 0〜100 にしたもの。
+  // 低い = 赤、高い = 緑が直感的なので発散型（ColorBrewer RdYlGn）。順次型の青は段階の差が分かりにくかった
   score: {
     key: 'score',
     title: '総合スコア（3 軸の百分位の重み付き平均、0〜100）',
     stops: [20, 40, 60, 80],
-    colors: ['#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d'],
+    colors: ['#d7191c', '#fdae61', '#ffffbf', '#a6d96a', '#1a9641'],
     labels: ['20 未満', '20 〜 40', '40 〜 60', '60 〜 80', '80 以上'],
     naLabel: 'いずれかの軸が比較不可・データなし',
   },
@@ -381,6 +382,14 @@ function setupAxisSwitch() {
       renderLegend(axis);
     });
   }
+  // 塗りの濃さ（不透明度）。背景の道路や写真をどれだけ透かすかは好みなのでスライダーにする
+  const opacity = document.getElementById('fill-opacity') as HTMLInputElement;
+  const apply = () => {
+    map.setPaintProperty('chome-fill', 'fill-opacity', Number(opacity.value) / 100);
+    opacity.nextElementSibling!.textContent = `${opacity.value}%`;
+  };
+  opacity.addEventListener('input', apply);
+  apply();
 }
 
 function setupBasemapSwitch() {
