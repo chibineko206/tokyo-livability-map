@@ -14,6 +14,10 @@ npm run dev        # http://localhost:5173/tokyo-livability-map/
 npm run build      # dist/ に出力。main への push で GitHub Pages に配られる
 ```
 
+## スマホで使う（PWA）
+
+ストアには出さない。Safari / Chrome で開き「ホーム画面に追加」すると、`public/manifest.webmanifest` の設定で全画面のアプリとして起動する。Service Worker は入れていないのでオフラインでは動かない（タイルのキャッシュは容量を食うため）。アイコンは `public/favicon.svg` から `rsvg-convert` で PNG にしたもの（`icon-192.png`、`icon-512.png`、`apple-touch-icon.png`）。
+
 ## データの再生成
 
 ```bash
