@@ -119,6 +119,13 @@ body {
   padding: 1px 0;
 }
 
+.popup-places {
+  font-size: 11px;
+  color: #444;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
 .popup-note {
   font-size: 11px;
   color: #888;

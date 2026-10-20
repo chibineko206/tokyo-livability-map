@@ -181,3 +181,23 @@ WHERE o.category IN ('grocery_store', 'superstore', 'organic_grocery_store', 'co
   AND ST_Contains(tokyo.geom, ST_GeomFromText(o.wkt));
 
 SELECT 'places' AS tbl, source, category, count(*) AS n FROM places GROUP BY ALL ORDER BY 2, 3;
+
+-- ============================================================
+-- access: 町丁目の重心から直線 1 km（徒歩 15 分の近似）以内の施設数をカテゴリ別に数える
+-- 距離は平面直角座標 IX 系（EPSG:6677）に直してメートルで測る。島部は系の外だが近距離なので誤差は無視する
+-- ============================================================
+CREATE OR REPLACE TEMP TABLE cent AS
+SELECT key_code, ST_Transform(ST_Centroid(geom), 'EPSG:4326', 'EPSG:6677', always_xy := true) AS pt FROM chome;
+CREATE OR REPLACE TEMP TABLE pl AS
+SELECT category, ST_Transform(geom, 'EPSG:4326', 'EPSG:6677', always_xy := true) AS pt FROM places;
+
+DELETE FROM access;
+INSERT INTO access
+SELECT c.key_code, cat.category, count(p.pt)
+FROM cent c
+CROSS JOIN (SELECT DISTINCT category FROM places) cat
+LEFT JOIN pl p ON p.category = cat.category AND ST_DWithin(c.pt, p.pt, 1000)
+GROUP BY ALL;
+
+SELECT 'access' AS tbl, count(*) AS rows, count(DISTINCT key_code) AS chome FROM access;
+SELECT 'chome without access' AS chk, count(*) AS n FROM chome WHERE key_code NOT IN (SELECT key_code FROM access);
