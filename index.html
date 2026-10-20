@@ -4,13 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="東京都の町丁目ごとに人口増減・犯罪発生率・施設の近さを重ねて見る地図" />
+    <meta name="theme-color" content="#2b8cbe" />
+    <!-- PWA: ホーム画面に追加すると全画面で起動する -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="住環境マップ" />
     <title>東京の住環境マップ</title>
   </head>
   <body>
     <div id="map"></div>
     <aside id="panel">
-      <h1>東京の住環境マップ</h1>
-      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 8: 総合スコアと重みのスライダー。</p>
+      <!-- スマホでは下部シート。見出しをタップで広げる / 畳む -->
+      <button id="sheet-toggle" type="button" aria-expanded="false" aria-controls="panel-body">
+        <h1>東京の住環境マップ</h1>
+        <span class="chevron" aria-hidden="true"></span>
+      </button>
+      <div id="panel-body">
+      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。町丁目をタップすると数値が出ます。</p>
 
       <section>
         <h2>表示する軸</h2>
@@ -40,6 +54,7 @@
         <p id="places-hint" class="note" hidden>ズーム 13 以上で表示されます</p>
         <ul id="places-legend" class="legend"></ul>
       </section>
+      </div>
     </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,0 +1,16 @@
+{
+  "name": "東京の住環境マップ",
+  "short_name": "住環境マップ",
+  "description": "東京都の町丁目ごとに人口増減・犯罪発生率・施設の近さを重ねて見る地図",
+  "start_url": "/tokyo-livability-map/",
+  "scope": "/tokyo-livability-map/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#2b8cbe",
+  "lang": "ja",
+  "icons": [
+    { "src": "/tokyo-livability-map/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/tokyo-livability-map/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
