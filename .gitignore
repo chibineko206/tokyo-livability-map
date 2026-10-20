@@ -30,3 +30,4 @@ data/work.duckdb
 data/work.duckdb.wal
 !data/raw/.gitkeep
 !data/out/.gitkeep
+__pycache__/

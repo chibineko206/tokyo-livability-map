@@ -136,3 +136,48 @@ WHERE category = '総合計' AND crime_name NOT IN (SELECT crime_name FROM crime
 SELECT 'unmatched name' AS chk, crime_name, cnt
 FROM crime_raw r JOIN crime_names USING (crime_name)
 WHERE category = '総合計' AND crime_name NOT IN (SELECT crime_name FROM crime_map) ORDER BY cnt DESC;
+
+-- ============================================================
+-- places: 施設ポイント
+--   学校・医療機関・保育所は国土数値情報（P29 学校、P04 医療機関、P14 福祉施設）。座標は JGD2011 緯度経度
+--   スーパー・コンビニ・薬局・公園は Overture Maps places（国土数値情報に無い業種だけ）
+--   Overture は bbox で取ったので神奈川などがはみ出す。町丁目ポリゴンの中にある点だけ残す
+-- ============================================================
+DELETE FROM places;
+
+-- P29 学校: 16001 小学校、16002 中学校、16014 義務教育学校 → school。16011 幼稚園 → child_care
+INSERT INTO places
+SELECT 'ksj-p29-' || row_number() OVER (), 'ksj',
+       CASE WHEN P29_003 = 16011 THEN 'child_care' ELSE 'school' END,
+       P29_004, geom
+FROM st_read('data/raw/ksj/P29-21_13_GML/P29-21_13.geojson')
+WHERE P29_003 IN (16001, 16002, 16014, 16011);
+
+-- P04 医療機関: 1 病院、2 診療所 → medical（3 歯科診療所は除く）
+INSERT INTO places
+SELECT 'ksj-p04-' || row_number() OVER (), 'ksj', 'medical', trim(P04_002), geom
+FROM st_read('data/raw/ksj/P04-20_13_GML/P04-20_13_GML/P04-20_13.geojson')
+WHERE P04_001 IN (1, 2);
+
+-- P14 福祉施設: 中分類 19013（保育所等）と小分類 805（認定こども園）→ child_care
+INSERT INTO places
+SELECT 'ksj-p14-' || row_number() OVER (), 'ksj', 'child_care', P14_007,
+       ST_Point(CAST(lon AS DOUBLE), CAST(lat AS DOUBLE))
+FROM read_csv('data/raw/ksj/P14-15_13_GML/P14-15_13.csv', all_varchar = true)
+WHERE P14_005 = '19013' OR P14_006 = '805';
+
+-- Overture: taxonomy.primary で選ぶ
+CREATE OR REPLACE TEMP TABLE tokyo AS SELECT ST_Union_Agg(geom) AS geom FROM chome;
+
+INSERT INTO places
+SELECT o.id, 'overture',
+       CASE WHEN o.category IN ('grocery_store', 'superstore', 'organic_grocery_store') THEN 'supermarket'
+            WHEN o.category = 'convenience_store' THEN 'convenience'
+            WHEN o.category IN ('pharmacy', 'drugstore') THEN 'drugstore'
+            WHEN o.category = 'park' THEN 'park' END AS category,
+       o.name, ST_GeomFromText(o.wkt)
+FROM read_parquet('data/raw/overture/places-tokyo.parquet') o, tokyo
+WHERE o.category IN ('grocery_store', 'superstore', 'organic_grocery_store', 'convenience_store', 'pharmacy', 'drugstore', 'park')
+  AND ST_Contains(tokyo.geom, ST_GeomFromText(o.wkt));
+
+SELECT 'places' AS tbl, source, category, count(*) AS n FROM places GROUP BY ALL ORDER BY 2, 3;

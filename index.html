@@ -10,7 +10,7 @@
     <div id="map"></div>
     <aside id="panel">
       <h1>東京の住環境マップ</h1>
-      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 5: 軸を切り替え、町丁目をクリックすると数値を表示。</p>
+      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 6: 施設の点を重ねる（ズーム 13 以上）。</p>
 
       <section>
         <h2>表示する軸</h2>
@@ -24,6 +24,13 @@
         <h2>凡例</h2>
         <p id="legend-title" class="note"></p>
         <ul id="legend" class="legend"></ul>
+      </section>
+
+      <section>
+        <h2>施設</h2>
+        <label><input type="checkbox" id="places-toggle" checked /> 施設を表示</label>
+        <p id="places-hint" class="note" hidden>ズーム 13 以上で表示されます</p>
+        <ul id="places-legend" class="legend"></ul>
       </section>
     </aside>
     <script type="module" src="/src/main.ts"></script>
