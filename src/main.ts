@@ -21,8 +21,9 @@ setWorkerUrl(maplibreWorkerUrl);
 const protocol = new Protocol();
 addProtocol('pmtiles', protocol.tile);
 
-// 背景は地理院ベクトルタイルの淡色スタイル
+// 背景は地理院ベクトルタイルの淡色スタイル。切り替えで地理院の航空写真（ラスター）を上に重ねる
 const GSI_STYLE = 'https://gsi-cyberjapan.github.io/gsivectortile-mapbox-gl-js/pale.json';
+const GSI_PHOTO_TILES = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg';
 
 // 配信物の URL（GitHub Pages の base を含める）
 const BASE = `${location.origin}${import.meta.env.BASE_URL}`;
@@ -253,6 +254,16 @@ map.on('load', async () => {
   const lastDrawn = Math.max(-1, ...layers.map((l, i) => (l.type === 'symbol' ? -1 : i)));
   const firstSymbol = layers.slice(lastDrawn + 1).find((l) => l.type === 'symbol')?.id;
 
+  // 航空写真は淡色地図の道路・建物を覆い、町丁目の塗りと注記はその上に残す。既定は非表示
+  map.addSource('gsi-photo', {
+    type: 'raster',
+    tiles: [GSI_PHOTO_TILES],
+    tileSize: 256,
+    maxzoom: 18,
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#seamlessphoto" target="_blank" rel="noopener">地理院タイル（全国最新写真）</a>',
+  });
+  map.addLayer({ id: 'gsi-photo', type: 'raster', source: 'gsi-photo', layout: { visibility: 'none' } }, firstSymbol);
+
   map.addSource('chome', {
     type: 'vector',
     url: `pmtiles://${CHOME_URL}`,
@@ -269,7 +280,7 @@ map.on('load', async () => {
       'source-layer': 'chome',
       paint: {
         'fill-color': fillColorExpression(axis),
-        'fill-opacity': 0.6,
+        'fill-opacity': 0.45, // 背景の道路や写真が透けて見える程度
       },
     },
     firstSymbol,
@@ -329,6 +340,7 @@ map.on('load', async () => {
   setupInteraction();
   setupAxisSwitch();
   setupPlacesToggle();
+  setupBasemapSwitch();
   setupSheet();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
@@ -367,6 +379,14 @@ function setupAxisSwitch() {
       if (!axis) return;
       map.setPaintProperty('chome-fill', 'fill-color', fillColorExpression(axis));
       renderLegend(axis);
+    });
+  }
+}
+
+function setupBasemapSwitch() {
+  for (const el of document.querySelectorAll<HTMLInputElement>('input[name="basemap"]')) {
+    el.addEventListener('change', () => {
+      map.setLayoutProperty('gsi-photo', 'visibility', el.value === 'photo' ? 'visible' : 'none');
     });
   }
 }
