@@ -36,6 +36,25 @@ body {
   margin: 0 0 8px;
 }
 
+/* 見出しはスマホでだけボタンになる。PC では見た目を見出しのままにする */
+#sheet-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+#sheet-toggle .chevron {
+  display: none;
+}
+
 .note {
   font-size: 12px;
   color: #666;
@@ -157,22 +176,57 @@ body {
   margin-top: 6px;
 }
 
-/* スマホ: 地図を全面にし、パネルを下部シートにする（工程 9 で仕上げる） */
+/* スマホ: 地図を全面にし、パネルを下部シートにする。既定は見出しだけ、タップで広げる */
 @media (max-width: 640px) {
+  :root {
+    --sheet-head: 52px; /* 畳んだシートの高さ。地図の余白とポップアップの位置に使う */
+  }
   #map {
     inset: 0;
   }
   .maplibregl-popup-content {
-    max-height: calc(60vh - 48px); /* 下部シート（40vh）に隠れない高さ */
+    /* スクロール可能にすると headless Chromium で上に白い箱が描かれる不具合があったので、スマホでは高さを制限しない */
+    max-height: none;
+    overflow-y: visible;
   }
   #panel {
     top: auto;
     left: 0;
     width: auto;
-    max-height: 40vh;
+    max-height: var(--sheet-head);
+    padding-top: 10px;
     border-left: none;
     border-top: 1px solid var(--border);
     border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    transition: max-height 0.2s ease-out;
+    overflow-y: hidden; /* 畳んでいる間はスクロールさせない（見出しだけ見せる） */
+  }
+  #panel.expanded {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  #sheet-toggle {
+    cursor: pointer;
+    min-height: 32px;
+  }
+  #sheet-toggle .chevron {
+    display: block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-right: 2px solid #888;
+    border-bottom: 2px solid #888;
+    transform: rotate(-135deg); /* 畳んでいるときは上向き */
+    transition: transform 0.2s;
+  }
+  #panel.expanded .chevron {
+    transform: rotate(45deg);
+  }
+  /* 地図の操作ボタンがシートに隠れないよう、シートの高さ分だけ上げる */
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right {
+    bottom: var(--sheet-head);
   }
 }

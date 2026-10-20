@@ -215,6 +215,8 @@ function renderPlacesLegend() {
 }
 
 // ---- 地図 ------------------------------------------------------------------
+const mobile = matchMedia('(max-width: 640px)');
+
 const map = new MapLibreMap({
   container: 'map',
   style: GSI_STYLE,
@@ -228,7 +230,7 @@ const map = new MapLibreMap({
 
 map.addControl(
   new AttributionControl({
-    compact: false,
+    compact: mobile.matches, // スマホでは「i」ボタンに畳む（ポップアップと重なるため）
     customAttribution:
       '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>' +
       ' | <a href="https://www.e-stat.go.jp/" target="_blank" rel="noopener">e-Stat</a>（国勢調査 2015・2020 小地域）' +
@@ -236,6 +238,7 @@ map.addControl(
       ' | <a href="https://nlftp.mlit.go.jp/ksj/" target="_blank" rel="noopener">国土数値情報</a>（学校・医療機関・福祉施設）' +
       ' | <a href="https://overturemaps.org/" target="_blank" rel="noopener">Overture Maps</a>（places、CDLA Permissive 2.0）',
   }),
+  mobile.matches ? 'top-right' : 'bottom-right', // スマホでは下部シートとポップアップから離す
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
 
@@ -317,6 +320,7 @@ map.on('load', async () => {
   setupInteraction();
   setupAxisSwitch();
   setupPlacesToggle();
+  setupSheet();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
   const rows: Stat[] = await (await fetch(STATS_URL)).json();
@@ -368,6 +372,28 @@ function setupPlacesToggle() {
   el.addEventListener('change', apply);
   map.on('zoomend', apply);
   apply();
+}
+
+// ---- スマホの下部シート -----------------------------------------------------
+
+function collapseSheet() {
+  const panel = document.getElementById('panel')!;
+  panel.classList.remove('expanded');
+  panel.scrollTop = 0; // 畳んだときに見出しが見えるよう、スクロールを先頭に戻す
+  document.getElementById('sheet-toggle')!.setAttribute('aria-expanded', 'false');
+}
+
+function setupSheet() {
+  const panel = document.getElementById('panel')!;
+  const btn = document.getElementById('sheet-toggle')!;
+  btn.addEventListener('click', () => {
+    if (!mobile.matches) return; // PC では見出しのまま
+    if (panel.classList.contains('expanded')) collapseSheet();
+    else {
+      panel.classList.add('expanded');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  });
 }
 
 // ---- 操作: ホバーで輪郭を強調、クリック（タップ）でポップアップ ------------
@@ -461,6 +487,7 @@ function setupInteraction() {
 
   const popup = new Popup({ closeButton: true, maxWidth: '280px' });
   map.on('click', (e) => {
+    collapseSheet(); // タップしたらシートは畳む（地図を広く使い、ポップアップが隠れないようにする）
     // 施設の点が町丁目の上にあるので、点が当たればそちらを優先する
     const place = map.queryRenderedFeatures(e.point, { layers: ['places-circle'] })[0];
     if (place) {
