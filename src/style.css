@@ -1,0 +1,60 @@
+:root {
+  --panel-w: 280px;
+  --fg: #222;
+  --bg: #fff;
+  --border: #ddd;
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  color: var(--fg);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+#map {
+  position: fixed;
+  inset: 0 var(--panel-w) 0 0;
+}
+
+#panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--panel-w);
+  box-sizing: border-box;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+
+#panel h1 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.note {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+}
+
+/* スマホ: 地図を全面にし、パネルを下部シートにする（工程 9 で仕上げる） */
+@media (max-width: 640px) {
+  #map {
+    inset: 0;
+  }
+  #panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
