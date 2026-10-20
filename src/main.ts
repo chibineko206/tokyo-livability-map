@@ -283,17 +283,19 @@ map.on('load', async () => {
       source: 'chome',
       'source-layer': 'chome',
       paint: {
-        'line-color': ['case', hovered, '#000', '#555'],
+        'line-color': ['case', hovered, '#000', '#333'],
         // zoom は最上位の interpolate でしか使えないので、ホバー判定は内側に置く
+        // 通常の輪郭は太い道路（高速道路）の上でも見える太さにする
         'line-width': [
           'interpolate',
           ['linear'],
           ['zoom'],
-          8, ['case', hovered, 2, 0.2],
-          12, ['case', hovered, 2.5, 0.5],
-          14, ['case', hovered, 3, 1.0],
+          8, ['case', hovered, 2, 0.3],
+          12, ['case', hovered, 2.5, 0.8],
+          14, ['case', hovered, 3, 1.5],
+          16, ['case', hovered, 3.5, 2],
         ],
-        'line-opacity': ['case', hovered, 1, 0.7],
+        'line-opacity': ['case', hovered, 1, 0.8],
       },
     },
     firstSymbol,
