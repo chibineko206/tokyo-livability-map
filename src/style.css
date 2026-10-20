@@ -91,11 +91,31 @@ body {
   box-shadow: 0 0 0 1px #999;
 }
 
+/* 重みのスライダー */
+#weights label {
+  display: grid;
+  grid-template-columns: 5.5em 1fr 1.5em;
+  align-items: center;
+  gap: 6px;
+}
+
+#weights input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
+
+#weights output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ポップアップ */
 .maplibregl-popup-content {
   padding: 10px 12px;
   font-size: 13px;
   color: var(--fg);
+  max-height: 70vh; /* 内容が長いので、地図からはみ出す代わりにスクロールさせる */
+  overflow-y: auto;
 }
 
 .popup-title {
@@ -119,6 +139,11 @@ body {
   padding: 1px 0;
 }
 
+.popup .radar {
+  display: block;
+  margin: 4px auto 0;
+}
+
 .popup-places {
   font-size: 11px;
   color: #444;
@@ -136,6 +161,9 @@ body {
 @media (max-width: 640px) {
   #map {
     inset: 0;
+  }
+  .maplibregl-popup-content {
+    max-height: calc(60vh - 48px); /* 下部シート（40vh）に隠れない高さ */
   }
   #panel {
     top: auto;
