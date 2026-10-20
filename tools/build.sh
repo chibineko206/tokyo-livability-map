@@ -17,6 +17,10 @@ python3 tools/dbf2csv.py data/raw/estat2020/r2ka13.dbf data/raw/estat2020/r2ka13
 iconv -f CP932 -t UTF-8 data/raw/tblT000848/tblT000848C13.txt > data/raw/tblT000848/tblT000848C13.utf8.csv
 # 警視庁の認知件数 CSV も Shift_JIS
 iconv -f CP932 -t UTF-8 data/raw/keishicho/R7.csv > data/raw/keishicho/R7.utf8.csv
+# 国土数値情報の福祉施設（P14）は Shape のみで DBF が Shift_JIS。ポイントなので Python で CSV にする
+python3 tools/shp2csv.py data/raw/ksj/P14-15_13_GML/P14-15_13.shp data/raw/ksj/P14-15_13_GML/P14-15_13.csv
+# Overture places は S3 から東京都の範囲だけ取り出す（5〜10 分かかるので無いときだけ）
+[ -f data/raw/overture/places-tokyo.parquet ] || duckdb -f tools/fetch-overture.sql
 duckdb "$DB" -f tools/00-load.sql
 
 echo "== 2. 町丁目 → PMTiles"
@@ -29,12 +33,11 @@ echo "== 3. stats.json"
 duckdb "$DB" -f tools/02-stats.sql
 ls -la public/stats.json
 
-# 工程 6 以降で有効にする
-#
-# echo "== 4. 施設 → PMTiles"
-# duckdb "$DB" -f tools/03-places.sql
-# tippecanoe -o public/places.pmtiles -l places -Z11 -z15 \
-#   --drop-densest-as-needed --force data/out/places.geojson
+echo "== 4. 施設 → PMTiles"
+duckdb "$DB" -f tools/03-places.sql
+tippecanoe -q -o public/places.pmtiles -l places -Z11 -z15 \
+  --drop-densest-as-needed --force data/out/places.geojson
+pmtiles show public/places.pmtiles | head -12
 
 echo "== done"
 duckdb "$DB" -c "SHOW TABLES"

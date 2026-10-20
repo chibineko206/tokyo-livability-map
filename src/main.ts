@@ -27,6 +27,7 @@ const GSI_STYLE = 'https://gsi-cyberjapan.github.io/gsivectortile-mapbox-gl-js/p
 // 配信物の URL（GitHub Pages の base を含める）
 const BASE = `${location.origin}${import.meta.env.BASE_URL}`;
 const CHOME_URL = new URL('chome.pmtiles', BASE).href;
+const PLACES_URL = new URL('places.pmtiles', BASE).href;
 const STATS_URL = new URL('stats.json', BASE).href;
 
 // ---- 軸と凡例の定義 --------------------------------------------------------
@@ -72,6 +73,18 @@ const AXES: Record<string, AxisDef> = {
   },
 };
 
+// 施設カテゴリ（places.pmtiles の category 属性）の表示名と色。工程 7 の集計でも同じキーを使う
+const PLACE_CATEGORIES: Record<string, { label: string; color: string }> = {
+  school: { label: '小中学校', color: '#1b9e77' },
+  child_care: { label: '保育所・幼稚園', color: '#66a61e' },
+  medical: { label: '病院・診療所', color: '#e7298a' },
+  supermarket: { label: 'スーパー', color: '#d95f02' },
+  convenience: { label: 'コンビニ', color: '#e6ab02' },
+  drugstore: { label: '薬局・ドラッグストア', color: '#7570b3' },
+  park: { label: '公園', color: '#a6761d' },
+};
+const PLACES_MIN_ZOOM = 13;
+
 // feature-state の値を階級色にする式
 function fillColorExpression(axis: AxisDef): ExpressionSpecification {
   const value: ExpressionSpecification = ['feature-state', axis.key];
@@ -80,19 +93,27 @@ function fillColorExpression(axis: AxisDef): ExpressionSpecification {
   return ['case', ['==', value, null], NA_COLOR, step];
 }
 
-function renderLegend(axis: AxisDef) {
-  document.getElementById('legend-title')!.textContent = axis.title;
-  const ul = document.getElementById('legend')!;
+function fillLegend(ul: HTMLElement, items: readonly (readonly [string, string])[], shape: 'box' | 'dot') {
   ul.innerHTML = '';
-  const items = axis.colors.map((c, i) => [c, axis.labels[i]] as const).concat([[NA_COLOR, axis.naLabel]]);
   for (const [color, label] of items) {
     const li = document.createElement('li');
     const sw = document.createElement('span');
-    sw.className = 'swatch';
+    sw.className = shape === 'dot' ? 'swatch dot' : 'swatch';
     sw.style.background = color;
     li.append(sw, label);
     ul.append(li);
   }
+}
+
+function renderLegend(axis: AxisDef) {
+  document.getElementById('legend-title')!.textContent = axis.title;
+  const items = axis.colors.map((c, i) => [c, axis.labels[i]] as const).concat([[NA_COLOR, axis.naLabel]]);
+  fillLegend(document.getElementById('legend')!, items, 'box');
+}
+
+function renderPlacesLegend() {
+  const items = Object.values(PLACE_CATEGORIES).map((c) => [c.color, c.label] as const);
+  fillLegend(document.getElementById('places-legend')!, items, 'dot');
 }
 
 // ---- 地図 ------------------------------------------------------------------
@@ -103,6 +124,7 @@ const map = new MapLibreMap({
   zoom: 11,
   minZoom: 8,
   maxZoom: 16,
+  hash: true, // URL に #ズーム/緯度/経度 を持たせ、表示位置を共有できるようにする
   attributionControl: false,
 });
 
@@ -112,7 +134,9 @@ map.addControl(
     customAttribution:
       '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>' +
       ' | <a href="https://www.e-stat.go.jp/" target="_blank" rel="noopener">e-Stat</a>（国勢調査 2015・2020 小地域）' +
-      ' | <a href="https://www.keishicho.metro.tokyo.lg.jp/about_mpd/jokyo_tokei/jokyo/ninchikensu.html" target="_blank" rel="noopener">警視庁</a>（認知件数 2025）',
+      ' | <a href="https://www.keishicho.metro.tokyo.lg.jp/about_mpd/jokyo_tokei/jokyo/ninchikensu.html" target="_blank" rel="noopener">警視庁</a>（認知件数 2025）' +
+      ' | <a href="https://nlftp.mlit.go.jp/ksj/" target="_blank" rel="noopener">国土数値情報</a>（学校・医療機関・福祉施設）' +
+      ' | <a href="https://overturemaps.org/" target="_blank" rel="noopener">Overture Maps</a>（places、CDLA Permissive 2.0）',
   }),
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
@@ -167,9 +191,34 @@ map.on('load', async () => {
     firstSymbol,
   );
 
+  // 施設は町丁目の上、注記の下。ズーム 13 以上でだけ出す
+  map.addSource('places', { type: 'vector', url: `pmtiles://${PLACES_URL}` });
+  const matchArgs: unknown[] = ['match', ['get', 'category']];
+  for (const [key, c] of Object.entries(PLACE_CATEGORIES)) matchArgs.push(key, c.color);
+  matchArgs.push('#999');
+  const categoryColor = matchArgs as ExpressionSpecification;
+  map.addLayer(
+    {
+      id: 'places-circle',
+      type: 'circle',
+      source: 'places',
+      'source-layer': 'places',
+      minzoom: PLACES_MIN_ZOOM,
+      paint: {
+        'circle-color': categoryColor,
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 1,
+      },
+    },
+    firstSymbol,
+  );
+
   renderLegend(axis);
+  renderPlacesLegend();
   setupInteraction();
   setupAxisSwitch();
+  setupPlacesToggle();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
   const rows: Stat[] = await (await fetch(STATS_URL)).json();
@@ -198,6 +247,18 @@ function setupAxisSwitch() {
       renderLegend(axis);
     });
   }
+}
+
+function setupPlacesToggle() {
+  const el = document.getElementById('places-toggle') as HTMLInputElement;
+  const hint = document.getElementById('places-hint')!;
+  const apply = () => {
+    map.setLayoutProperty('places-circle', 'visibility', el.checked ? 'visible' : 'none');
+    hint.hidden = !el.checked || map.getZoom() >= PLACES_MIN_ZOOM;
+  };
+  el.addEventListener('change', apply);
+  map.on('zoomend', apply);
+  apply();
 }
 
 // ---- 操作: ホバーで輪郭を強調、クリック（タップ）でポップアップ ------------
@@ -257,9 +318,21 @@ function setupInteraction() {
   });
 
   const popup = new Popup({ closeButton: true, maxWidth: '280px' });
-  map.on('click', 'chome-fill', (e) => {
-    const f = e.features?.[0];
+  map.on('click', (e) => {
+    // 施設の点が町丁目の上にあるので、点が当たればそちらを優先する
+    const place = map.queryRenderedFeatures(e.point, { layers: ['places-circle'] })[0];
+    if (place) {
+      const p = place.properties as { category: string; name: string | null };
+      const cat = PLACE_CATEGORIES[p.category]?.label ?? p.category;
+      popup
+        .setLngLat(e.lngLat)
+        .setHTML(`<div class="popup"><div class="popup-title">${p.name ?? '名称不明'}</div><div class="popup-note">${cat}</div></div>`)
+        .addTo(map);
+      return;
+    }
+    const f = map.queryRenderedFeatures(e.point, { layers: ['chome-fill'] })[0];
     if (!f) return;
     popup.setLngLat(e.lngLat).setHTML(popupHtml(f)).addTo(map);
   });
+  map.on('mouseenter', 'places-circle', () => (map.getCanvas().style.cursor = 'pointer'));
 }
