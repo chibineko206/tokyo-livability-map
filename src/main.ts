@@ -39,6 +39,14 @@ type Stat = {
   rate: number | null;
   crime_total: number | null; // 2025 年の認知件数（総合計）
   crime_per_1000: number | null; // 人口千人あたり。2020 年人口 100 人未満は null
+  access_score: number | null; // 施設の近さ 0〜7（カテゴリごとに中央値で頭打ちした比の和）
+  school: number | null; // 以下、重心から 1 km 以内の施設数
+  child_care: number | null;
+  medical: number | null;
+  supermarket: number | null;
+  convenience: number | null;
+  drugstore: number | null;
+  park: number | null;
 };
 
 type AxisDef = {
@@ -70,6 +78,15 @@ const AXES: Record<string, AxisDef> = {
     colors: ['#ffffb2', '#fecc5c', '#fd8d3c', '#f03b20', '#bd0026'],
     labels: ['2 未満', '2 〜 4', '4 〜 8', '8 〜 16', '16 以上'],
     naLabel: 'データなし、または 2020 年人口 100 人未満',
+  },
+  // 施設の近さは大きいほど良いので順次型（ColorBrewer YlGn）
+  access: {
+    key: 'access_score',
+    title: '施設の近さ（重心から 1 km 以内、0〜7）',
+    stops: [2, 4, 5.5, 6.5],
+    colors: ['#ffffcc', '#c2e699', '#78c679', '#31a354', '#006837'],
+    labels: ['2 未満', '2 〜 4', '4 〜 5.5', '5.5 〜 6.5', '6.5 以上'],
+    naLabel: 'データなし',
   },
 };
 
@@ -231,6 +248,14 @@ map.on('load', async () => {
         pop2020: s.pop2020,
         crime_total: s.crime_total,
         crime_per_1000: s.crime_per_1000,
+        access_score: s.access_score,
+        school: s.school,
+        child_care: s.child_care,
+        medical: s.medical,
+        supermarket: s.supermarket,
+        convenience: s.convenience,
+        drugstore: s.drugstore,
+        park: s.park,
       },
     );
   }
@@ -266,6 +291,13 @@ function fmt(n: number | null | undefined, unit = ''): string {
   return n === null || n === undefined ? '—' : `${n.toLocaleString('ja-JP')}${unit}`;
 }
 
+// 「小中学校 6・保育所 11・…」の形で 1 km 以内の施設数を並べる
+function placesSummary(s: Partial<Stat>): string {
+  return Object.entries(PLACE_CATEGORIES)
+    .map(([key, c]) => `${c.label} ${fmt(s[key as keyof Stat] as number | null)}`)
+    .join('・');
+}
+
 function popupHtml(f: MapGeoJSONFeature): string {
   const p = f.properties as { key_code: string; city_name: string; name: string | null };
   const s = f.state as Partial<Stat>;
@@ -287,7 +319,9 @@ function popupHtml(f: MapGeoJSONFeature): string {
         <tr><th>増減率</th><td>${rate}</td></tr>
         <tr><th>認知件数 2025</th><td>${fmt(s.crime_total, ' 件')}</td></tr>
         <tr><th>千人あたり</th><td>${crimeRate}</td></tr>
+        <tr><th>施設の近さ</th><td>${fmt(s.access_score)} / 7</td></tr>
       </table>
+      <div class="popup-places">1 km 以内: ${placesSummary(s)}</div>
       <div class="popup-note">${notes.join('<br>')}</div>
     </div>`;
 }

@@ -10,13 +10,13 @@
     <div id="map"></div>
     <aside id="panel">
       <h1>東京の住環境マップ</h1>
-      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 6: 施設の点を重ねる（ズーム 13 以上）。</p>
+      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 7: 施設の近さの軸を追加。</p>
 
       <section>
         <h2>表示する軸</h2>
         <label><input type="radio" name="axis" value="rate" checked /> 人口増減（2015 → 2020）</label>
         <label><input type="radio" name="axis" value="crime" /> 犯罪発生率（2025、人口千人あたり）</label>
-        <label class="disabled"><input type="radio" name="axis" value="access" disabled /> 施設の近さ（工程 7）</label>
+        <label><input type="radio" name="axis" value="access" /> 施設の近さ（1 km 以内の充実度）</label>
         <label class="disabled"><input type="radio" name="axis" value="score" disabled /> 総合スコア（工程 8）</label>
       </section>
 
