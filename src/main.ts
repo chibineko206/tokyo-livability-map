@@ -31,7 +31,7 @@ const PLACES_URL = new URL('places.pmtiles', BASE).href;
 const STATS_URL = new URL('stats.json', BASE).href;
 
 // ---- 軸と凡例の定義 --------------------------------------------------------
-// stats.json の 1 行。工程 7 で列が増える
+// stats.json の 1 行（tools/00-schema.sql のビュー stats と同じ列）
 type Stat = {
   key_code: string;
   pop2015: number | null;
@@ -171,7 +171,7 @@ function setupWeights() {
   }
 }
 
-// 施設カテゴリ（places.pmtiles の category 属性）の表示名と色。工程 7 の集計でも同じキーを使う
+// 施設カテゴリ（places.pmtiles の category 属性）の表示名と色。stats の列名（1 km 以内の数）と同じキー
 const PLACE_CATEGORIES: Record<string, { label: string; color: string }> = {
   school: { label: '小中学校', color: '#1b9e77' },
   child_care: { label: '保育所・幼稚園', color: '#66a61e' },
