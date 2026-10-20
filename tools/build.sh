@@ -10,16 +10,18 @@ mkdir -p data/raw data/out public
 echo "== 0. スキーマ"
 duckdb "$DB" -f tools/00-schema.sql
 
-# 工程 2 以降で有効にする
-# echo "== 1. 取り込み"
-# for f in data/raw/*.sjis.csv; do iconv -f SHIFT_JIS -t UTF-8 "$f" > "${f%.sjis.csv}.csv"; done
-# duckdb "$DB" -f tools/00-load.sql
-#
-# echo "== 2. 町丁目 → PMTiles"
-# duckdb "$DB" -f tools/01-chome.sql
-# tippecanoe -o public/chome.pmtiles -l chome -Z8 -z14 \
-#   --detect-shared-borders --simplification=10 --force data/out/chome.geojson
-#
+echo "== 1. 取り込み"
+# e-Stat 境界の DBF は Shift_JIS。DuckDB 同梱の GDAL は変換できないので Python で UTF-8 CSV にする
+python3 tools/dbf2csv.py data/raw/estat2020/r2ka13.dbf data/raw/estat2020/r2ka13.attr.csv
+duckdb "$DB" -f tools/00-load.sql
+
+echo "== 2. 町丁目 → PMTiles"
+duckdb "$DB" -f tools/01-chome.sql
+tippecanoe -q -o public/chome.pmtiles -l chome -Z8 -z14 \
+  --detect-shared-borders --simplification=10 --force data/out/chome.geojson
+pmtiles show public/chome.pmtiles | head -12
+
+# 工程 3 以降で有効にする
 # echo "== 3. stats.json"
 # duckdb "$DB" -f tools/02-stats.sql
 #

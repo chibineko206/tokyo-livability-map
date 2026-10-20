@@ -40,6 +40,38 @@ map.addControl(
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
 
+// 町丁目ポリゴン（工程 2: 輪郭線のみ。塗りは工程 3 で feature-state により付ける）
+const CHOME_URL = new URL('chome.pmtiles', `${location.origin}${import.meta.env.BASE_URL}`).href;
+
 map.on('load', () => {
+  map.addSource('chome', {
+    type: 'vector',
+    url: `pmtiles://${CHOME_URL}`,
+    promoteId: { chome: 'key_code' }, // setFeatureState が地物を特定するために必要
+  });
+
+  map.addLayer({
+    id: 'chome-fill',
+    type: 'fill',
+    source: 'chome',
+    'source-layer': 'chome',
+    paint: {
+      'fill-color': '#888',
+      'fill-opacity': 0, // 工程 3 で feature-state による塗りに置き換える
+    },
+  });
+
+  map.addLayer({
+    id: 'chome-line',
+    type: 'line',
+    source: 'chome',
+    'source-layer': 'chome',
+    paint: {
+      'line-color': '#555',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 12, 0.6, 14, 1.2],
+      'line-opacity': 0.8,
+    },
+  });
+
   console.log('map loaded');
 });
