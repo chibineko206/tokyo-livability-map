@@ -242,9 +242,16 @@ map.addControl(
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
 
+// 開発時だけ、ブラウザのコンソールや Playwright から地図を触れるようにする
+if (import.meta.env.DEV) (window as unknown as { __map: MapLibreMap }).__map = map;
+
 map.on('load', async () => {
-  // 背景の注記（symbol レイヤー）より下に主題レイヤーを入れる
-  const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
+  // 主題レイヤーは背景の道路・建物より上、注記（地名・駅名）より下に入れる。
+  // 地理院のスタイルは line / fill と symbol が交互に並ぶので、「最後の line / fill の直後の symbol」を境にする
+  // （最初の symbol の手前だと道路の下になり、市街地で塗りが細切れに見え、ホバーの輪郭も道路に隠れる）
+  const layers = map.getStyle().layers;
+  const lastDrawn = Math.max(-1, ...layers.map((l, i) => (l.type === 'symbol' ? -1 : i)));
+  const firstSymbol = layers.slice(lastDrawn + 1).find((l) => l.type === 'symbol')?.id;
 
   map.addSource('chome', {
     type: 'vector',
