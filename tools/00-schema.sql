@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS places (
   geom     GEOMETRY
 );
 
--- 町丁目の重心から 1 km 以内のカテゴリ別施設数
+-- 町丁目の重心から 1 km 以内のカテゴリ別施設数。全町丁目 × 全カテゴリの行を持つ（無ければ 0）
 CREATE TABLE IF NOT EXISTS access (
   key_code VARCHAR,
   category VARCHAR,
@@ -55,10 +55,12 @@ CREATE TABLE IF NOT EXISTS access (
   PRIMARY KEY (key_code, category)
 );
 
--- ビュー stats: 配信する町丁目ごとの数値。工程 7 で列を足す
+-- ビュー stats: 配信する町丁目ごとの数値
 -- rate は 2015 → 2020 の増減率（%）。2015 の人口が 100 人未満か不明なら NULL（比較不可）
 -- crime_per_1000 は 2025 年の認知件数（総合計）÷ 2020 年人口 × 1000。人口 100 人未満は NULL
 -- （皇居・公園・埋立地で発生率が極端になるのを防ぐ。件数 crime_total は人口に関わらず出す）
+-- access_score は施設の近さ（0〜7）。カテゴリごとに「重心から 1 km 以内の数 ÷ 全町丁目の中央値」を 1 で頭打ちにして足す
+-- （7 種類すべてが中央値以上そろっていれば 7。件数の多寡より「ひととおり揃うか」を見る）
 CREATE OR REPLACE VIEW stats AS
 WITH p AS (
   SELECT key_code,
@@ -68,6 +70,19 @@ WITH p AS (
 ), cr AS (
   SELECT key_code, sum(cnt) AS crime_total
   FROM crime WHERE year = 2025 AND category = '総合計' GROUP BY key_code
+), cap AS (
+  SELECT category, quantile_cont(cnt, 0.5) AS med FROM access WHERE cnt > 0 GROUP BY category
+), ac AS (
+  SELECT a.key_code,
+         round(sum(least(a.cnt / cap.med, 1.0)), 2) AS access_score,
+         max(cnt) FILTER (WHERE a.category = 'school')      AS school,
+         max(cnt) FILTER (WHERE a.category = 'child_care')  AS child_care,
+         max(cnt) FILTER (WHERE a.category = 'medical')     AS medical,
+         max(cnt) FILTER (WHERE a.category = 'supermarket') AS supermarket,
+         max(cnt) FILTER (WHERE a.category = 'convenience') AS convenience,
+         max(cnt) FILTER (WHERE a.category = 'drugstore')   AS drugstore,
+         max(cnt) FILTER (WHERE a.category = 'park')        AS park
+  FROM access a JOIN cap USING (category) GROUP BY a.key_code
 )
 SELECT c.key_code,
        p.pop2015,
@@ -76,5 +91,7 @@ SELECT c.key_code,
             THEN round((p.pop2020 - p.pop2015) * 100.0 / p.pop2015, 1) END AS rate,
        round(cr.crime_total, 1) AS crime_total,
        CASE WHEN p.pop2020 >= 100 AND cr.crime_total IS NOT NULL
-            THEN round(cr.crime_total * 1000.0 / p.pop2020, 1) END AS crime_per_1000
-FROM chome c LEFT JOIN p USING (key_code) LEFT JOIN cr USING (key_code);
+            THEN round(cr.crime_total * 1000.0 / p.pop2020, 1) END AS crime_per_1000,
+       ac.access_score,
+       ac.school, ac.child_care, ac.medical, ac.supermarket, ac.convenience, ac.drugstore, ac.park
+FROM chome c LEFT JOIN p USING (key_code) LEFT JOIN cr USING (key_code) LEFT JOIN ac USING (key_code);
