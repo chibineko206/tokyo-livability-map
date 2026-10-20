@@ -2,9 +2,11 @@ import {
   Map as MapLibreMap,
   AttributionControl,
   NavigationControl,
+  Popup,
   addProtocol,
   setWorkerUrl,
   type ExpressionSpecification,
+  type MapGeoJSONFeature,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -128,6 +130,7 @@ map.on('load', async () => {
     firstSymbol,
   );
 
+  const hovered: ExpressionSpecification = ['boolean', ['feature-state', 'hover'], false];
   map.addLayer(
     {
       id: 'chome-line',
@@ -135,15 +138,24 @@ map.on('load', async () => {
       source: 'chome',
       'source-layer': 'chome',
       paint: {
-        'line-color': '#555',
-        'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 12, 0.5, 14, 1.0],
-        'line-opacity': 0.7,
+        'line-color': ['case', hovered, '#000', '#555'],
+        // zoom は最上位の interpolate でしか使えないので、ホバー判定は内側に置く
+        'line-width': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          8, ['case', hovered, 2, 0.2],
+          12, ['case', hovered, 2.5, 0.5],
+          14, ['case', hovered, 3, 1.0],
+        ],
+        'line-opacity': ['case', hovered, 1, 0.7],
       },
     },
     firstSymbol,
   );
 
   renderLegend(axis);
+  setupInteraction();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
   const rows: Stat[] = await (await fetch(STATS_URL)).json();
@@ -155,3 +167,58 @@ map.on('load', async () => {
   }
   console.log(`map loaded: stats ${rows.length} rows`);
 });
+
+// ---- 操作: ホバーで輪郭を強調、クリック（タップ）でポップアップ ------------
+function fmt(n: number | null | undefined, unit = ''): string {
+  return n === null || n === undefined ? '—' : `${n.toLocaleString('ja-JP')}${unit}`;
+}
+
+function popupHtml(f: MapGeoJSONFeature): string {
+  const p = f.properties as { key_code: string; city_name: string; name: string | null };
+  const s = f.state as Partial<Stat>;
+  const title = p.name ? `${p.city_name} ${p.name}` : `${p.city_name}（名称なし）`;
+  const rate = s.rate === null || s.rate === undefined ? '比較不可' : `${s.rate > 0 ? '+' : ''}${s.rate}%`;
+  return `
+    <div class="popup">
+      <div class="popup-title">${title}</div>
+      <table>
+        <tr><th>人口 2015</th><td>${fmt(s.pop2015, ' 人')}</td></tr>
+        <tr><th>人口 2020</th><td>${fmt(s.pop2020, ' 人')}</td></tr>
+        <tr><th>増減率</th><td>${rate}</td></tr>
+      </table>
+      <div class="popup-note">町丁目コード ${p.key_code}</div>
+    </div>`;
+}
+
+function setupInteraction() {
+  const src = { source: 'chome', sourceLayer: 'chome' };
+  let hoveredId: string | number | null = null;
+
+  const clearHover = () => {
+    if (hoveredId !== null) {
+      map.setFeatureState({ ...src, id: hoveredId }, { hover: false });
+      hoveredId = null;
+    }
+  };
+
+  // PC のみ: スマホはホバーが無いのでタップのポップアップだけになる
+  map.on('mousemove', 'chome-fill', (e) => {
+    const f = e.features?.[0];
+    if (!f || f.id === hoveredId) return;
+    clearHover();
+    hoveredId = f.id ?? null;
+    if (hoveredId !== null) map.setFeatureState({ ...src, id: hoveredId }, { hover: true });
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'chome-fill', () => {
+    clearHover();
+    map.getCanvas().style.cursor = '';
+  });
+
+  const popup = new Popup({ closeButton: true, maxWidth: '280px' });
+  map.on('click', 'chome-fill', (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    popup.setLngLat(e.lngLat).setHTML(popupHtml(f)).addTo(map);
+  });
+}

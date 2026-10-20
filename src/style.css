@@ -83,6 +83,40 @@ body {
   flex: none;
 }
 
+/* ポップアップ */
+.maplibregl-popup-content {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.popup-title {
+  font-weight: 600;
+  margin: 0 20px 6px 0;
+}
+
+.popup table {
+  border-collapse: collapse;
+}
+
+.popup th {
+  text-align: left;
+  font-weight: normal;
+  color: #666;
+  padding: 1px 10px 1px 0;
+}
+
+.popup td {
+  text-align: right;
+  padding: 1px 0;
+}
+
+.popup-note {
+  font-size: 11px;
+  color: #888;
+  margin-top: 6px;
+}
+
 /* スマホ: 地図を全面にし、パネルを下部シートにする（工程 9 で仕上げる） */
 @media (max-width: 640px) {
   #map {
