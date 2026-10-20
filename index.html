@@ -10,14 +10,22 @@
     <div id="map"></div>
     <aside id="panel">
       <h1>東京の住環境マップ</h1>
-      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 7: 施設の近さの軸を追加。</p>
+      <p class="note">町丁目ごとの人口増減・犯罪発生率・施設の近さを重ねて見る地図。工程 8: 総合スコアと重みのスライダー。</p>
 
       <section>
         <h2>表示する軸</h2>
         <label><input type="radio" name="axis" value="rate" checked /> 人口増減（2015 → 2020）</label>
         <label><input type="radio" name="axis" value="crime" /> 犯罪発生率（2025、人口千人あたり）</label>
         <label><input type="radio" name="axis" value="access" /> 施設の近さ（1 km 以内の充実度）</label>
-        <label class="disabled"><input type="radio" name="axis" value="score" disabled /> 総合スコア（工程 8）</label>
+        <label><input type="radio" name="axis" value="score" /> 総合スコア（3 軸の重み付き平均）</label>
+      </section>
+
+      <section id="weights">
+        <h2>総合スコアの重み</h2>
+        <p class="note">各軸を百分位（0〜100）にして重み付き平均します。犯罪は少ないほど高くなります。</p>
+        <label>人口増減 <input type="range" name="weight" data-axis="rate" min="0" max="10" value="5" /><output>5</output></label>
+        <label>治安 <input type="range" name="weight" data-axis="crime_per_1000" min="0" max="10" value="5" /><output>5</output></label>
+        <label>施設の近さ <input type="range" name="weight" data-axis="access_score" min="0" max="10" value="5" /><output>5</output></label>
       </section>
 
       <section>
