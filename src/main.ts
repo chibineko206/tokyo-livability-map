@@ -21,8 +21,9 @@ setWorkerUrl(maplibreWorkerUrl);
 const protocol = new Protocol();
 addProtocol('pmtiles', protocol.tile);
 
-// 背景は地理院ベクトルタイルの淡色スタイル
+// 背景は地理院ベクトルタイルの淡色スタイル。切り替えで地理院の航空写真（ラスター）を上に重ねる
 const GSI_STYLE = 'https://gsi-cyberjapan.github.io/gsivectortile-mapbox-gl-js/pale.json';
+const GSI_PHOTO_TILES = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg';
 
 // 配信物の URL（GitHub Pages の base を含める）
 const BASE = `${location.origin}${import.meta.env.BASE_URL}`;
@@ -89,12 +90,13 @@ const AXES: Record<string, AxisDef> = {
     labels: ['2 未満', '2 〜 4', '4 〜 5.5', '5.5 〜 6.5', '6.5 以上'],
     naLabel: 'データなし',
   },
-  // 総合スコアは 3 軸の百分位（0〜1）を重み付き平均し 0〜100 にしたもの。順次型（ColorBrewer PuBu）
+  // 総合スコアは 3 軸の百分位（0〜1）を重み付き平均し 0〜100 にしたもの。
+  // 低い = 赤、高い = 緑が直感的なので発散型（ColorBrewer RdYlGn）。順次型の青は段階の差が分かりにくかった
   score: {
     key: 'score',
     title: '総合スコア（3 軸の百分位の重み付き平均、0〜100）',
     stops: [20, 40, 60, 80],
-    colors: ['#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d'],
+    colors: ['#d7191c', '#fdae61', '#ffffbf', '#a6d96a', '#1a9641'],
     labels: ['20 未満', '20 〜 40', '40 〜 60', '60 〜 80', '80 以上'],
     naLabel: 'いずれかの軸が比較不可・データなし',
   },
@@ -242,9 +244,26 @@ map.addControl(
 );
 map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
 
+// 開発時だけ、ブラウザのコンソールや Playwright から地図を触れるようにする
+if (import.meta.env.DEV) (window as unknown as { __map: MapLibreMap }).__map = map;
+
 map.on('load', async () => {
-  // 背景の注記（symbol レイヤー）より下に主題レイヤーを入れる
-  const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
+  // 主題レイヤーは背景の道路・建物より上、注記（地名・駅名）より下に入れる。
+  // 地理院のスタイルは line / fill と symbol が交互に並ぶので、「最後の line / fill の直後の symbol」を境にする
+  // （最初の symbol の手前だと道路の下になり、市街地で塗りが細切れに見え、ホバーの輪郭も道路に隠れる）
+  const layers = map.getStyle().layers;
+  const lastDrawn = Math.max(-1, ...layers.map((l, i) => (l.type === 'symbol' ? -1 : i)));
+  const firstSymbol = layers.slice(lastDrawn + 1).find((l) => l.type === 'symbol')?.id;
+
+  // 航空写真は淡色地図の道路・建物を覆い、町丁目の塗りと注記はその上に残す。既定は非表示
+  map.addSource('gsi-photo', {
+    type: 'raster',
+    tiles: [GSI_PHOTO_TILES],
+    tileSize: 256,
+    maxzoom: 18,
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#seamlessphoto" target="_blank" rel="noopener">地理院タイル（全国最新写真）</a>',
+  });
+  map.addLayer({ id: 'gsi-photo', type: 'raster', source: 'gsi-photo', layout: { visibility: 'none' } }, firstSymbol);
 
   map.addSource('chome', {
     type: 'vector',
@@ -262,7 +281,7 @@ map.on('load', async () => {
       'source-layer': 'chome',
       paint: {
         'fill-color': fillColorExpression(axis),
-        'fill-opacity': 0.6,
+        'fill-opacity': 0.45, // 背景の道路や写真が透けて見える程度
       },
     },
     firstSymbol,
@@ -276,17 +295,19 @@ map.on('load', async () => {
       source: 'chome',
       'source-layer': 'chome',
       paint: {
-        'line-color': ['case', hovered, '#000', '#555'],
+        'line-color': ['case', hovered, '#000', '#333'],
         // zoom は最上位の interpolate でしか使えないので、ホバー判定は内側に置く
+        // 通常の輪郭は太い道路（高速道路）の上でも見える太さにする
         'line-width': [
           'interpolate',
           ['linear'],
           ['zoom'],
-          8, ['case', hovered, 2, 0.2],
-          12, ['case', hovered, 2.5, 0.5],
-          14, ['case', hovered, 3, 1.0],
+          8, ['case', hovered, 2, 0.3],
+          12, ['case', hovered, 2.5, 0.8],
+          14, ['case', hovered, 3, 1.5],
+          16, ['case', hovered, 3.5, 2],
         ],
-        'line-opacity': ['case', hovered, 1, 0.7],
+        'line-opacity': ['case', hovered, 1, 0.8],
       },
     },
     firstSymbol,
@@ -320,6 +341,7 @@ map.on('load', async () => {
   setupInteraction();
   setupAxisSwitch();
   setupPlacesToggle();
+  setupBasemapSwitch();
   setupSheet();
 
   // 数値はタイルに焼かず、stats.json を feature-state で載せる（更新時にタイルを作り直さないため）
@@ -358,6 +380,22 @@ function setupAxisSwitch() {
       if (!axis) return;
       map.setPaintProperty('chome-fill', 'fill-color', fillColorExpression(axis));
       renderLegend(axis);
+    });
+  }
+  // 塗りの濃さ（不透明度）。背景の道路や写真をどれだけ透かすかは好みなのでスライダーにする
+  const opacity = document.getElementById('fill-opacity') as HTMLInputElement;
+  const apply = () => {
+    map.setPaintProperty('chome-fill', 'fill-opacity', Number(opacity.value) / 100);
+    opacity.nextElementSibling!.textContent = `${opacity.value}%`;
+  };
+  opacity.addEventListener('input', apply);
+  apply();
+}
+
+function setupBasemapSwitch() {
+  for (const el of document.querySelectorAll<HTMLInputElement>('input[name="basemap"]')) {
+    el.addEventListener('change', () => {
+      map.setLayoutProperty('gsi-photo', 'visibility', el.value === 'photo' ? 'visible' : 'none');
     });
   }
 }

@@ -32,6 +32,7 @@
         <label><input type="radio" name="axis" value="crime" /> 犯罪発生率（2025、人口千人あたり）</label>
         <label><input type="radio" name="axis" value="access" /> 施設の近さ（1 km 以内の充実度）</label>
         <label><input type="radio" name="axis" value="score" /> 総合スコア（3 軸の重み付き平均）</label>
+        <label class="slider">塗りの濃さ <input type="range" id="fill-opacity" min="0" max="100" value="45" /><output>45%</output></label>
       </section>
 
       <section id="weights">
@@ -46,6 +47,12 @@
         <h2>凡例</h2>
         <p id="legend-title" class="note"></p>
         <ul id="legend" class="legend"></ul>
+      </section>
+
+      <section>
+        <h2>背景</h2>
+        <label><input type="radio" name="basemap" value="pale" checked /> 淡色地図</label>
+        <label><input type="radio" name="basemap" value="photo" /> 航空写真</label>
       </section>
 
       <section>
